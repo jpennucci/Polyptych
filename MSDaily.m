@@ -2,13 +2,14 @@
 //  GPL v3, as the rest of MultiScape.
 
 #import "MSDaily.h"
-#import "MSBackgroundWorker.h"
 
 static NSString *const MSFolderKey = @"MSDailyFolder";
 static NSString *const MSQueueKey = @"MSDailyQueue";      // pictures still to show this round, shuffled
 static NSString *const MSLastKey = @"MSDailyLast";
 static NSString *const MSAgentLabel = @"com.multiscape.daily";
-static const NSInteger MSHour = 6;                        // 06:00, or at wake / login if the Mac was off
+static NSString *const MSScheduleKey = @"MSSchedule";
+static NSString *const MSLayoutKey = @"MSLayout";
+static const NSInteger MSHour = 6;                        // daily: 06:00, or at wake / login if the Mac was off
 
 @implementation MSDaily
 
@@ -28,7 +29,14 @@ static const NSInteger MSHour = 6;                        // 06:00, or at wake /
     return [[NSString stringWithFormat:@"~/Library/LaunchAgents/%@.plist", MSAgentLabel] stringByExpandingTildeInPath];
 }
 
-+ (BOOL)isEnabled { return [[NSFileManager defaultManager] fileExistsAtPath:[self agentPath]]; }
++ (MSSchedule)schedule {
+    if (![[NSFileManager defaultManager] fileExistsAtPath:[self agentPath]]) return MSScheduleOff;
+    MSSchedule s = [[self defaults] integerForKey:MSScheduleKey];
+    return s == MSScheduleOff ? MSScheduleDaily : s;  // an agent from before there was a choice was daily
+}
+
++ (MSLayout)layout { return [[self defaults] integerForKey:MSLayoutKey]; }  // Auto when never set
++ (void)setLayout:(MSLayout)layout { [[self defaults] setInteger:layout forKey:MSLayoutKey]; }
 
 + (int)launchctl:(NSArray *)args {
     NSTask *t = [[NSTask alloc] init];
@@ -41,22 +49,27 @@ static const NSInteger MSHour = 6;                        // 06:00, or at wake /
     return t.terminationStatus;
 }
 
-+ (NSString *)setEnabled:(BOOL)on {
++ (NSString *)setSchedule:(MSSchedule)schedule {
     NSString *domain = [NSString stringWithFormat:@"gui/%d", getuid()];
     NSString *path = [self agentPath];
     [self launchctl:@[@"bootout", [NSString stringWithFormat:@"%@/%@", domain, MSAgentLabel]]];
     [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
-    if (!on) return nil;
+    [[self defaults] setInteger:MSScheduleOff forKey:MSScheduleKey];
+    if (schedule == MSScheduleOff) return nil;
     if (![self folder]) return @"Choose a folder first.";
 
-    NSDictionary *agent = @{
+    NSMutableDictionary *agent = [@{
         @"Label": MSAgentLabel,
         @"ProgramArguments": @[[[NSBundle mainBundle] executablePath], @"--daily"],
-        @"StartCalendarInterval": @{@"Hour": @(MSHour), @"Minute": @0},
         @"RunAtLoad": @YES,                 // and at login
         @"ProcessType": @"Background",
         @"StandardErrorPath": [@"~/Library/Logs/MultiScape-daily.log" stringByExpandingTildeInPath],
-    };
+    } mutableCopy];
+    if (schedule == MSScheduleHourly) {
+        agent[@"StartInterval"] = @3600;
+    } else {
+        agent[@"StartCalendarInterval"] = @{@"Hour": @(MSHour), @"Minute": @0};
+    }
     [[NSFileManager defaultManager] createDirectoryAtPath:[path stringByDeletingLastPathComponent]
                               withIntermediateDirectories:YES attributes:nil error:nil];
     NSError *err = nil;
@@ -64,6 +77,7 @@ static const NSInteger MSHour = 6;                        // 06:00, or at wake /
                                                              options:0 error:&err];
     if (!data || ![data writeToFile:path atomically:YES]) return @"Couldn't write the launch agent.";
     if ([self launchctl:@[@"bootstrap", domain, path]] != 0) return @"launchctl wouldn't load the launch agent.";
+    [[self defaults] setInteger:schedule forKey:MSScheduleKey];
     return nil;
 }
 
@@ -108,10 +122,22 @@ static const NSInteger MSHour = 6;                        // 06:00, or at wake /
     if (![[NSFileManager defaultManager] fileExistsAtPath:folder]) return [NSString stringWithFormat:@"%@ isn't there (a drive not connected?).", folder];
     NSString *path = [self nextPicture];
     if (!path) return [NSString stringWithFormat:@"No pictures in %@.", folder];
+    return [self apply:path];
+}
+
++ (NSString *)applyAgain {
+    NSString *folder = [self folder], *last = [[self defaults] stringForKey:MSLastKey];
+    if (!folder || !last) return nil;
+    NSString *path = [folder stringByAppendingString:last];
+    return [[NSFileManager defaultManager] fileExistsAtPath:path] ? [self apply:path] : nil;
+}
+
++ (NSString *)apply:(NSString *)path {
     NSImage *image = [[NSImage alloc] initWithContentsOfFile:path];
     if (!image) return [NSString stringWithFormat:@"Couldn't open %@.", path.lastPathComponent];
     MSBackgroundWorker *w = [[MSBackgroundWorker alloc] init];
     w.baseImage = image;
+    w.layout = [self layout];
     [w execute];
     return [NSString stringWithFormat:@"%@\n%@", path.lastPathComponent, w.procText];
 }

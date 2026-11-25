@@ -110,25 +110,51 @@ static const CGFloat MSSpanAspect = 2.0;
         return;
     }
     CGFloat aspect = b.size.width / b.size.height;
-    BOOL span = aspect >= MSSpanAspect || [[NSScreen screens] count] < 2;
-    NSScreen *featured = span ? nil : [self screenForAspect:aspect];
+    BOOL several = [[NSScreen screens] count] > 1;
+    MSLayout layout = self.layout;
+    if (layout == MSLayoutAuto) {
+        // Wide enough to span; otherwise the screen whose shape fits best, filled unless that would cut a lot.
+        if (aspect >= MSSpanAspect || !several) {
+            layout = MSLayoutSpanFill;
+        } else {
+            NSScreen *best = [self screenForAspect:aspect];
+            CGFloat sa = best.frame.size.width / best.frame.size.height;
+            layout = fabs(log(aspect / sa)) < log(1.25) ? MSLayoutOneFill : MSLayoutOneFit;
+        }
+    }
+    BOOL spanFill = layout == MSLayoutSpanFill, spanFit = layout == MSLayoutSpanFit;
+    BOOL each = layout == MSLayoutEachFill || layout == MSLayoutEachFit;
+    BOOL one = layout == MSLayoutOneFill || layout == MSLayoutOneFit;
+    BOOL fill = layout == MSLayoutEachFill || layout == MSLayoutOneFill;
+    NSScreen *featured = one ? [self screenForAspect:aspect] : nil;
 
-    // Cover the canvas (no stretching), centred: the overhang is cropped equally from both sides.
+    // The spread across every screen: the picture covering it (span fill), or a blurred copy covering it with,
+    // for span fit, the whole picture over it, centred.
     double scale = MAX(_perfectSize.width / b.size.width, _perfectSize.height / b.size.height);
-    CIImage *scaled = span ? [self scaleImage:base byFactor:scale] : nil;
     CGRect se = CGRectMake(0, 0, b.size.width * scale, b.size.height * scale);
-    CIImage *source = span ? scaled : [self backdropFrom:base coverScale:scale extent:se];
+    CIImage *source = spanFill ? [self scaleImage:base byFactor:scale]
+                               : [self backdropFrom:base coverScale:scale extent:se];
     se = [source extent];
     CGFloat offX = se.origin.x + (se.size.width - _perfectSize.width) / 2.0;
     CGFloat offY = se.origin.y + (se.size.height - _perfectSize.height) / 2.0;
+    if (spanFit) {
+        double fitScale = MIN(_perfectSize.width / b.size.width, _perfectSize.height / b.size.height);
+        CIImage *whole = [self scaleImage:base byFactor:fitScale];
+        CGRect we = [whole extent];
+        whole = [whole imageByApplyingTransform:CGAffineTransformMakeTranslation(
+                     offX + (_perfectSize.width - we.size.width) / 2.0 - we.origin.x,
+                     offY + (_perfectSize.height - we.size.height) / 2.0 - we.origin.y)];
+        source = [[whole imageByCompositingOverImage:source] imageByCroppingToRect:se];
+    }
 
     NSString *outputDirectory = [self outputDirectory];
     CIContext *ctx = [CIContext contextWithOptions:nil];
+    NSArray *names = @[@"auto", @"spans all screens, filled", @"spans all screens, whole",
+                       @"on each screen, filled", @"on each screen, whole", @"filled", @"whole"];
     NSMutableArray *lines = [NSMutableArray arrayWithObject:
-        span ? [NSString stringWithFormat:@"%.0fx%.0f spans all screens (%.0fx%.0f)", b.size.width, b.size.height,
-                                          _perfectSize.width, _perfectSize.height]
-             : [NSString stringWithFormat:@"%.0fx%.0f on %@, blurred behind on the rest", b.size.width, b.size.height,
-                                          featured.localizedName]];
+        one ? [NSString stringWithFormat:@"%.0fx%.0f on %@, %@, blurred on the rest", b.size.width, b.size.height,
+                                         featured.localizedName, names[layout]]
+            : [NSString stringWithFormat:@"%.0fx%.0f %@", b.size.width, b.size.height, names[layout]]];
     NSUInteger n = 0;
     for (NSScreen *screen in [NSScreen screens]) {
         NSRect f = screen.frame;
@@ -142,18 +168,25 @@ static const CGFloat MSSpanAspect = 2.0;
                           imageByApplyingTransform:CGAffineTransformMakeTranslation(-r.origin.x, -r.origin.y)];
         CGFloat own = screen.backingScaleFactor / _maxScale;  // down to this screen's own pixels
         if (own < 1.0) {
-            piece = span ? [self scaleImage:piece byFactor:own]
-                         : [piece imageByApplyingTransform:CGAffineTransformMakeScale(own, own)];
+            piece = (spanFill || spanFit) ? [self scaleImage:piece byFactor:own]
+                                          : [piece imageByApplyingTransform:CGAffineTransformMakeScale(own, own)];
         }
-        if (screen == featured) {
-            // The whole picture, sharp: filling the screen when the shapes are close, else fitted over the blur.
-            CGFloat sa = (CGFloat)pw / ph;
-            BOOL cover = fabs(log(aspect / sa)) < log(1.15);
-            double s2 = cover ? MAX(pw / b.size.width, ph / b.size.height) : MIN(pw / b.size.width, ph / b.size.height);
+        if (each || screen == featured) {
+            // The whole picture on this screen alone: filling it (cropped), or fitted over the blur.
+            double s2 = fill ? MAX(pw / b.size.width, ph / b.size.height) : MIN(pw / b.size.width, ph / b.size.height);
             CIImage *sharp = [self scaleImage:base byFactor:s2];
             CGRect xe = [sharp extent];
             sharp = [sharp imageByApplyingTransform:CGAffineTransformMakeTranslation((pw - xe.size.width) / 2.0 - xe.origin.x,
                                                                                      (ph - xe.size.height) / 2.0 - xe.origin.y)];
+            if (each && !fill) {
+                // Each screen's own blur behind it, so the bars match the picture on that screen.
+                double cs = MAX(pw / b.size.width, ph / b.size.height);
+                CGRect ce = CGRectMake(0, 0, b.size.width * cs, b.size.height * cs);
+                CIImage *ownBlur = [self backdropFrom:base coverScale:cs extent:ce];
+                CGRect oe = [ownBlur extent];
+                piece = [ownBlur imageByApplyingTransform:CGAffineTransformMakeTranslation((pw - oe.size.width) / 2.0 - oe.origin.x,
+                                                                                       (ph - oe.size.height) / 2.0 - oe.origin.y)];
+            }
             piece = [sharp imageByCompositingOverImage:piece];
         }
         CGImageRef cg = [ctx createCGImage:piece fromRect:CGRectMake(0, 0, pw, ph)];

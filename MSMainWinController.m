@@ -28,7 +28,8 @@
     NSImage * _baseImage;
     MSBackgroundWorker *_worker;
     NSTextField *_folderField;
-    NSButton *_dailyBox;
+    NSPopUpButton *_layoutMenu;
+    NSPopUpButton *_scheduleMenu;
 }
 
 - (void) notifyOfCompletedBackgroundExecution:(NSNotification*)notif;
@@ -48,12 +49,13 @@
     [self addDailyControls];
 }
 
-#pragma mark Daily
-// Two rows under the drop area: the folder, and Change daily / Change now. Added in code, the nib left as it was.
+#pragma mark Folder, layout and schedule
+// Three rows under the drop area: the folder; the layout; how often it changes, and Change now.
+// Added in code, the nib left as it was.
 - (void)addDailyControls {
     NSWindow *w = self.window;
     NSView *content = w.contentView;
-    const CGFloat extra = 64;
+    const CGFloat extra = 100;
     content.autoresizesSubviews = NO;  // grow the window, then move what's there up by hand, once
     NSRect wf = w.frame; wf.size.height += extra; wf.origin.y -= extra;
     [w setFrame:wf display:NO];
@@ -63,22 +65,43 @@
     content.autoresizesSubviews = YES;
     CGFloat width = content.bounds.size.width;
 
-    NSTextField *label = [NSTextField labelWithString:@"Daily from:"];
-    label.frame = NSMakeRect(17, 40, 80, 20);
+    NSTextField *folderLabel = [NSTextField labelWithString:@"Folder:"];
+    folderLabel.frame = NSMakeRect(17, 76, 64, 20);
     _folderField = [NSTextField labelWithString:[MSDaily folder] ?: @"No folder chosen"];
-    _folderField.frame = NSMakeRect(96, 40, width - 96 - 112, 20);
+    _folderField.frame = NSMakeRect(80, 76, width - 80 - 112, 20);
     _folderField.lineBreakMode = NSLineBreakByTruncatingMiddle;
     _folderField.textColor = [MSDaily folder] ? NSColor.labelColor : NSColor.secondaryLabelColor;
     NSButton *choose = [NSButton buttonWithTitle:@"Choose…" target:self action:@selector(chooseFolder:)];
-    choose.frame = NSMakeRect(width - 110, 34, 96, 30);
+    choose.frame = NSMakeRect(width - 110, 70, 96, 30);
 
-    _dailyBox = [NSButton checkboxWithTitle:@"Change daily (6:00 and at login)" target:self action:@selector(toggleDaily:)];
-    _dailyBox.frame = NSMakeRect(17, 10, width - 140, 20);
-    _dailyBox.state = [MSDaily isEnabled] ? NSControlStateValueOn : NSControlStateValueOff;
+    NSTextField *layoutLabel = [NSTextField labelWithString:@"Layout:"];
+    layoutLabel.frame = NSMakeRect(17, 44, 64, 20);
+    _layoutMenu = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(76, 39, 260, 28) pullsDown:NO];
+    // In MSLayout's order.
+    [_layoutMenu addItemsWithTitles:@[@"Auto", @"Span – fill (clips top / bottom)", @"Span – fit (whole picture)", @"Each screen – fill",
+                                      @"Each screen – fit", @"One screen – fill", @"One screen – fit"]];
+    NSArray *tips = @[@"2:1 or wider spans every screen; narrower goes on the screen whose shape fits best",
+                      @"One picture across all screens, as wide as all of them; a regular picture loses its top and bottom, a panorama wider than the screens its sides",
+                      @"The whole picture across every screen, nothing cut, a blur around it",
+                      @"The same picture on every screen, cropped to fill each",
+                      @"The same picture whole on every screen, a blur around it",
+                      @"The screen whose shape fits best, filled; a blur on the others",
+                      @"The screen whose shape fits best, the whole picture; a blur around it and on the others"];
+    for (NSInteger i = 0; i < tips.count; i++) [_layoutMenu itemAtIndex:i].toolTip = tips[i];
+    [_layoutMenu selectItemAtIndex:[MSDaily layout]];
+    _layoutMenu.target = self; _layoutMenu.action = @selector(layoutChanged:);
+
+    NSTextField *changeLabel = [NSTextField labelWithString:@"Change:"];
+    changeLabel.frame = NSMakeRect(17, 12, 64, 20);
+    _scheduleMenu = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(76, 7, 260, 28) pullsDown:NO];
+    [_scheduleMenu addItemsWithTitles:@[@"Off", @"Every hour", @"Every day at 6:00"]];  // in MSSchedule's order
+    [_scheduleMenu selectItemAtIndex:[MSDaily schedule]];
+    _scheduleMenu.toolTip = @"Also at login. A Mac asleep at the time changes when it wakes.";
+    _scheduleMenu.target = self; _scheduleMenu.action = @selector(scheduleChanged:);
     NSButton *now = [NSButton buttonWithTitle:@"Change now" target:self action:@selector(changeNow:)];
-    now.frame = NSMakeRect(width - 120, 4, 106, 30);
+    now.frame = NSMakeRect(width - 120, 6, 106, 30);
 
-    for (NSView *v in @[label, _folderField, choose, _dailyBox, now]) {
+    for (NSView *v in @[folderLabel, _folderField, choose, layoutLabel, _layoutMenu, changeLabel, _scheduleMenu, now]) {
         v.autoresizingMask = (v == _folderField ? NSViewWidthSizable : (v == choose || v == now ? NSViewMinXMargin : 0)) | NSViewMaxYMargin;
         [content addSubview:v];
     }
@@ -89,21 +112,38 @@
     panel.canChooseDirectories = YES;
     panel.canChooseFiles = NO;
     panel.prompt = @"Use This Folder";
-    panel.message = @"Pictures in this folder (and its folders) are used in turn, one a day.";
+    panel.message = @"Pictures in this folder (and its folders) are used in turn.";
     if ([panel runModal] != NSModalResponseOK) return;
     [MSDaily setFolder:panel.URL.path];
     _folderField.stringValue = panel.URL.path;
     _folderField.textColor = NSColor.labelColor;
-    if ([MSDaily isEnabled]) [MSDaily setEnabled:YES];  // reload the agent with the new folder
+    MSSchedule s = [MSDaily schedule];
+    if (s != MSScheduleOff) [MSDaily setSchedule:s];  // reload the agent with the new folder
 }
 
-- (void)toggleDaily:(id)sender {
-    NSString *problem = [MSDaily setEnabled:_dailyBox.state == NSControlStateValueOn];
+- (void)layoutChanged:(id)sender {
+    [MSDaily setLayout:_layoutMenu.indexOfSelectedItem];
+    // Show it straight away: the picture dropped here, else the folder's current one.
+    [infoField setStringValue:@"Changing…"];
+    [infoField displayIfNeeded];
+    if (_baseImage) {
+        [self executeForImage:_baseImage];
+    } else {
+        NSString *done = [MSDaily applyAgain];
+        [infoField setStringValue:done ? [done stringByReplacingOccurrencesOfString:@"\n" withString:@"  ·  "] : @""];
+    }
+}
+
+- (void)scheduleChanged:(id)sender {
+    MSSchedule s = _scheduleMenu.indexOfSelectedItem;
+    NSString *problem = [MSDaily setSchedule:s];
     if (problem) {
-        _dailyBox.state = NSControlStateValueOff;
+        [_scheduleMenu selectItemAtIndex:MSScheduleOff];
         [infoField setStringValue:problem];
     } else {
-        [infoField setStringValue:[MSDaily isEnabled] ? @"A new wallpaper every day at 6:00, and at login." : @"Daily change off."];
+        NSArray *said = @[@"Off: it changes only when you drop a picture or click Change now.",
+                          @"A new picture every hour, and at login.", @"A new picture every day at 6:00, and at login."];
+        [infoField setStringValue:said[s]];
     }
 }
 
@@ -129,6 +169,7 @@
 - (void)executeForImage:(NSImage*)startImage {
     if (baseImageView.image) {
         _worker.baseImage = startImage;
+        _worker.layout = [MSDaily layout];
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(notifyOfCompletedBackgroundExecution:)
                                                      name:MSBackgroundWorkerFinishedNotification object:_worker];
         [_worker execute];
@@ -139,5 +180,6 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self name:MSBackgroundWorkerFinishedNotification object:_worker];
     [NSApp terminate:self];
 }
+
 
 @end

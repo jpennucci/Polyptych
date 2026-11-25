@@ -16,5 +16,10 @@ Local clone of nitantsoni/multiscape (no releases upstream), built and installed
   narrower ones go whole on the screen whose shape fits best (portrait on a 27"), over a blurred copy on the rest.
   Output keeps the last 4 runs in ~/Pictures/MultiScape. Checked with dry runs (3:2, 2:3) and the window; the agent
   not yet run by launchd with a folder (James to choose one). Log: ~/Library/Logs/MultiScape-daily.log.
+- 2026-11-25: Layout menu (Auto, Span fill / fit, Each screen fill / fit, One screen fill / fit; a change re-applies
+  the current picture) and Change menu (Off, Every hour, Every day at 6:00; all also at login). Auto fills the best
+  screen when its shape is within 25% (a 3:2 photo fills the 43"). All 7 checked by dry run on a 3:2 grid; the hourly
+  agent checked with launchd on an empty folder (ran at load, exit 0), then removed. Bundle id is still
+  com.yourcompany.MultiScape (its settings live there).
 - Open: only the current Space on each screen gets it (macOS sets wallpaper per Space). Bezel gaps not modelled.
 - Rebuild: `xcodebuild -project MultiScape.xcodeproj -scheme MultiScape -configuration Release -derivedDataPath build/dd CODE_SIGN_IDENTITY=- build`

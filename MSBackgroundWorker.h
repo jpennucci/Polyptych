@@ -21,6 +21,16 @@
 #import <Cocoa/Cocoa.h>
 #import <Quartz/Quartz.h>
 
+typedef NS_ENUM(NSInteger, MSLayout) {  // the order of the Layout menu; saved as a number
+    MSLayoutAuto = 0,     // span when 2:1 or wider, else one screen
+    MSLayoutSpanFill,     // one picture across every screen, cropped to fill
+    MSLayoutSpanFit,      // the whole picture across every screen, a blur around it
+    MSLayoutEachFill,     // the same picture on every screen, cropped to fill each
+    MSLayoutEachFit,      // the same picture whole on every screen, a blur around it
+    MSLayoutOneFill,      // the screen whose shape fits best, filled; a blur on the rest
+    MSLayoutOneFit,       // the same screen, the whole picture; a blur around it and on the rest
+};
+
 #define MSBackgroundWorkerFinishedNotification @"MSBackgroundWorkerFinishedNotification"
 
 @interface MSBackgroundWorker : NSObject {
@@ -34,6 +44,7 @@
 
 @property (weak, readwrite) NSImage *baseImage; 
 @property (copy, readwrite) NSString *procText;
+@property (assign, readwrite) MSLayout layout;
 @property (assign, readwrite) BOOL dryRun;     // make the pictures, leave the wallpaper alone
 
 - (void)execute;
