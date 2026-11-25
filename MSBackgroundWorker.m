@@ -68,6 +68,38 @@
     [self performSelectorOnMainThread:@selector(mainThreadCompletionNotification) withObject:nil waitUntilDone:NO];
 }
 
+// A picture at least this wide (width / height) spans every screen. A narrower one is shown whole on the screen
+// whose shape matches it best, over a blurred copy of itself spread across all of them.
+static const CGFloat MSSpanAspect = 2.0;
+
+- (CIImage *)backdropFrom:(CIImage *)base coverScale:(double)scale extent:(CGRect)se {
+    // Blur a small copy and scale it back up: the same look as blurring the full size, far less work.
+    const double small = 0.08;
+    CIImage *tiny = [self scaleImage:base byFactor:scale * small];
+    CIFilter *blur = [CIFilter filterWithName:@"CIGaussianBlur"];
+    [blur setValue:[tiny imageByClampingToExtent] forKey:kCIInputImageKey];
+    [blur setValue:@(MAX(tiny.extent.size.width, tiny.extent.size.height) * 0.025) forKey:kCIInputRadiusKey];  // 2.5% of the spread
+    CIFilter *dim = [CIFilter filterWithName:@"CIColorControls"];
+    [dim setValue:blur.outputImage forKey:kCIInputImageKey];
+    [dim setValue:@(-0.12) forKey:kCIInputBrightnessKey];
+    [dim setValue:@(0.9) forKey:kCIInputSaturationKey];
+    CGRect te = [tiny extent];
+    CIImage *up = [dim.outputImage imageByApplyingTransform:CGAffineTransformMakeScale(se.size.width / te.size.width,
+                                                                                         se.size.height / te.size.height)];
+    return [up imageByCroppingToRect:se];
+}
+
+- (NSScreen *)screenForAspect:(CGFloat)aspect {
+    NSScreen *best = nil; CGFloat bestScore = CGFLOAT_MAX;
+    for (NSScreen *screen in [NSScreen screens]) {
+        CGFloat sa = screen.frame.size.width / screen.frame.size.height;
+        // How far apart the shapes are, then the bigger screen on a tie.
+        CGFloat score = fabs(log(aspect / sa)) - 0.0001 * log(screen.frame.size.width * screen.frame.size.height);
+        if (score < bestScore) { bestScore = score; best = screen; }
+    }
+    return best;
+}
+
 - (void)execute {
     [self perfectSize];  // the arrangement may have changed since the window opened
     CIImage *base = [CIImage imageWithData:[baseImage TIFFRepresentation]];
@@ -77,34 +109,52 @@
         [self notifyOfCompletionInMainThread];
         return;
     }
+    CGFloat aspect = b.size.width / b.size.height;
+    BOOL span = aspect >= MSSpanAspect || [[NSScreen screens] count] < 2;
+    NSScreen *featured = span ? nil : [self screenForAspect:aspect];
 
     // Cover the canvas (no stretching), centred: the overhang is cropped equally from both sides.
     double scale = MAX(_perfectSize.width / b.size.width, _perfectSize.height / b.size.height);
-    CIImage *scaled = [self scaleImage:base byFactor:scale];
-    CGRect se = [scaled extent];
+    CIImage *scaled = span ? [self scaleImage:base byFactor:scale] : nil;
+    CGRect se = CGRectMake(0, 0, b.size.width * scale, b.size.height * scale);
+    CIImage *source = span ? scaled : [self backdropFrom:base coverScale:scale extent:se];
+    se = [source extent];
     CGFloat offX = se.origin.x + (se.size.width - _perfectSize.width) / 2.0;
     CGFloat offY = se.origin.y + (se.size.height - _perfectSize.height) / 2.0;
 
     NSString *outputDirectory = [self outputDirectory];
     CIContext *ctx = [CIContext contextWithOptions:nil];
     NSMutableArray *lines = [NSMutableArray arrayWithObject:
-        [NSString stringWithFormat:@"%.0fx%.0f -(x%.3f)-> %.0fx%.0f", b.size.width, b.size.height, scale,
-                                   _perfectSize.width, _perfectSize.height]];
+        span ? [NSString stringWithFormat:@"%.0fx%.0f spans all screens (%.0fx%.0f)", b.size.width, b.size.height,
+                                          _perfectSize.width, _perfectSize.height]
+             : [NSString stringWithFormat:@"%.0fx%.0f on %@, blurred behind on the rest", b.size.width, b.size.height,
+                                          featured.localizedName]];
     NSUInteger n = 0;
     for (NSScreen *screen in [NSScreen screens]) {
         NSRect f = screen.frame;
-        // This screen's rectangle in the scaled picture (Core Image and Cocoa both count y up from the bottom).
+        size_t pw = (size_t)llround(f.size.width * screen.backingScaleFactor);
+        size_t ph = (size_t)llround(f.size.height * screen.backingScaleFactor);
+        // This screen's rectangle of the spread (Core Image and Cocoa both count y up from the bottom).
         CGRect r = CGRectMake(offX + (f.origin.x - _canvas.origin.x) * _maxScale,
                               offY + (f.origin.y - _canvas.origin.y) * _maxScale,
                               f.size.width * _maxScale, f.size.height * _maxScale);
-        CIImage *piece = [[scaled imageByCroppingToRect:r]
+        CIImage *piece = [[source imageByCroppingToRect:r]
                           imageByApplyingTransform:CGAffineTransformMakeTranslation(-r.origin.x, -r.origin.y)];
-        // Down to this screen's own pixels (a 1x screen beside 2x ones).
-        CGFloat own = screen.backingScaleFactor / _maxScale;
-        size_t pw = (size_t)llround(f.size.width * screen.backingScaleFactor);
-        size_t ph = (size_t)llround(f.size.height * screen.backingScaleFactor);
+        CGFloat own = screen.backingScaleFactor / _maxScale;  // down to this screen's own pixels
         if (own < 1.0) {
-            piece = [self scaleImage:piece byFactor:own];
+            piece = span ? [self scaleImage:piece byFactor:own]
+                         : [piece imageByApplyingTransform:CGAffineTransformMakeScale(own, own)];
+        }
+        if (screen == featured) {
+            // The whole picture, sharp: filling the screen when the shapes are close, else fitted over the blur.
+            CGFloat sa = (CGFloat)pw / ph;
+            BOOL cover = fabs(log(aspect / sa)) < log(1.15);
+            double s2 = cover ? MAX(pw / b.size.width, ph / b.size.height) : MIN(pw / b.size.width, ph / b.size.height);
+            CIImage *sharp = [self scaleImage:base byFactor:s2];
+            CGRect xe = [sharp extent];
+            sharp = [sharp imageByApplyingTransform:CGAffineTransformMakeTranslation((pw - xe.size.width) / 2.0 - xe.origin.x,
+                                                                                     (ph - xe.size.height) / 2.0 - xe.origin.y)];
+            piece = [sharp imageByCompositingOverImage:piece];
         }
         CGImageRef cg = [ctx createCGImage:piece fromRect:CGRectMake(0, 0, pw, ph)];
         if (!cg) { [lines addObject:[NSString stringWithFormat:@"%@: couldn't render", screen.localizedName]]; continue; }
@@ -137,6 +187,14 @@
     if(![fileManager fileExistsAtPath:[@"~/Pictures/MultiScape" stringByExpandingTildeInPath]]) {
         [fileManager createDirectoryAtPath:[@"~/Pictures/MultiScape" stringByExpandingTildeInPath] withIntermediateDirectories:YES attributes:nil error:nil];
     }
+    // Keep the last few runs (the wallpaper in use is always among them), not one more folder a day forever.
+    NSString *root = [@"~/Pictures/MultiScape" stringByExpandingTildeInPath];
+    NSArray *runs = [[[fileManager contentsOfDirectoryAtPath:root error:nil]
+                      filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF MATCHES '^[0-9]+\\.[0-9]+$'"]]
+                     sortedArrayUsingComparator:^(NSString *a, NSString *b) { return [@(b.doubleValue) compare:@(a.doubleValue)]; }];
+    for (NSUInteger i = 4; i < runs.count; i++) {
+        [fileManager removeItemAtPath:[root stringByAppendingPathComponent:runs[i]] error:nil];
+    }
     [fileManager createDirectoryAtPath:directoryForOutput withIntermediateDirectories:YES attributes:nil error:nil];
     
     return directoryForOutput;
@@ -149,7 +207,6 @@
     [scaleTransformFilter setValue:[NSNumber numberWithInt:1] forKey:@"inputAspectRatio"];
     
     CIImage *scaledBaseImage = [scaleTransformFilter valueForKey:@"outputImage"];
-    NSLog(@"Scaled base image dimensions: %f x %f",[scaledBaseImage extent].size.width, [scaledBaseImage extent].size.height);
     return [scaleTransformFilter valueForKey:@"outputImage"];
 }
 

@@ -10,5 +10,11 @@ Local clone of nitantsoni/multiscape (no releases upstream), built and installed
   screen's rect at its own pixels (2x for Retina) and sets it with NSWorkspace setDesktopImageURL:forScreen:
   (no System Events, no permission). Checked with a grid on James's 3 Dells (43" landscape 1x between two 27"
   portrait 2x): seams continuous. dryRun makes the pictures without setting them.
+- 2026-11-25: daily change from a folder (MSDaily): Choose… / Change daily / Change now under the drop area. A launch
+  agent (~/Library/LaunchAgents/com.multiscape.daily.plist) runs `MultiScape --daily` at 06:00 and at login: the next
+  picture from a shuffled round of the folder and its subfolders, no window. Pictures 2:1 or wider span every screen;
+  narrower ones go whole on the screen whose shape fits best (portrait on a 27"), over a blurred copy on the rest.
+  Output keeps the last 4 runs in ~/Pictures/MultiScape. Checked with dry runs (3:2, 2:3) and the window; the agent
+  not yet run by launchd with a folder (James to choose one). Log: ~/Library/Logs/MultiScape-daily.log.
 - Open: only the current Space on each screen gets it (macOS sets wallpaper per Space). Bezel gaps not modelled.
 - Rebuild: `xcodebuild -project MultiScape.xcodeproj -scheme MultiScape -configuration Release -derivedDataPath build/dd CODE_SIGN_IDENTITY=- build`

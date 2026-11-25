@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1DDD58160DA1D0A300B32029 /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = 1DDD58140DA1D0A300B32029 /* MainMenu.xib */; };
+		AA00000000000000000000A3 /* MSDaily.m in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000000A2 /* MSDaily.m */; };
 		351ADEB8128C783600676F5A /* MSBackgroundWorker.m in Sources */ = {isa = PBXBuildFile; fileRef = 351ADEB7128C783600676F5A /* MSBackgroundWorker.m */; };
 		355EA1640EFECD2F0035F797 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 355EA1630EFECD2F0035F797 /* QuartzCore.framework */; };
 		356E18660EFD9C38005119F7 /* MSMainWinController.m in Sources */ = {isa = PBXBuildFile; fileRef = 356E18650EFD9C38005119F7 /* MSMainWinController.m */; };
@@ -27,6 +28,8 @@
 		29B97324FDCFA39411CA2CEA /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = /System/Library/Frameworks/AppKit.framework; sourceTree = "<absolute>"; };
 		29B97325FDCFA39411CA2CEA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = /System/Library/Frameworks/Foundation.framework; sourceTree = "<absolute>"; };
 		32CA4F630368D1EE00C91783 /* MultiScape_Prefix.pch */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MultiScape_Prefix.pch; sourceTree = "<group>"; };
+		AA00000000000000000000A1 /* MSDaily.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MSDaily.h; sourceTree = "<group>"; };
+		AA00000000000000000000A2 /* MSDaily.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MSDaily.m; sourceTree = "<group>"; };
 		351ADEB6128C783600676F5A /* MSBackgroundWorker.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = MSBackgroundWorker.h; sourceTree = "<group>"; };
 		351ADEB7128C783600676F5A /* MSBackgroundWorker.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = MSBackgroundWorker.m; sourceTree = "<group>"; };
 		3536FCB60FCFAD3B00D61072 /* MultiScape tests-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "MultiScape tests-Info.plist"; sourceTree = "<group>"; };
@@ -67,6 +70,8 @@
 				356E18650EFD9C38005119F7 /* MSMainWinController.m */,
 				351ADEB6128C783600676F5A /* MSBackgroundWorker.h */,
 				351ADEB7128C783600676F5A /* MSBackgroundWorker.m */,
+				AA00000000000000000000A1 /* MSDaily.h */,
+				AA00000000000000000000A2 /* MSDaily.m */,
 			);
 			name = Classes;
 			sourceTree = "<group>";
@@ -222,6 +227,7 @@
 				8D11072D0486CEB800E47090 /* main.m in Sources */,
 				356E18660EFD9C38005119F7 /* MSMainWinController.m in Sources */,
 				351ADEB8128C783600676F5A /* MSBackgroundWorker.m in Sources */,
+				AA00000000000000000000A3 /* MSDaily.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
