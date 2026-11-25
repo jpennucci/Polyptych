@@ -32,6 +32,8 @@ typedef NS_ENUM(NSInteger, MSLayout) {  // the order of the Layout menu; saved a
     MSLayoutOneFit,       // the same screen, the whole picture; a blur around it and on the rest
 };
 
+#define MSLastSetKey @"MSLastSet"  // display id (as text) -> the picture it was last given
+#define MSWallpaperChangedNotification @"com.jpennucci.polyptych.changed"  // distributed: any run that set one
 #define MSBackgroundWorkerFinishedNotification @"MSBackgroundWorkerFinishedNotification"
 
 @interface MSBackgroundWorker : NSObject {

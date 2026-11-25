@@ -16,6 +16,7 @@ A *polyptych* is a painting made of several panels. Polyptych makes one out of y
   - **Span, fit:** the whole picture across all screens, nothing cut, a blur of it around.
   - **Each screen, fill / fit:** the same picture on every screen.
   - **One screen, fill / fit:** the best-shaped screen gets the picture; the others a blur of it.
+- **A preview** of what each screen shows, laid out like your screens, kept up to date.
 - **A new picture every hour or every day** (and at login) from a folder you choose, its subfolders included, each
   picture once before any comes round again.
 

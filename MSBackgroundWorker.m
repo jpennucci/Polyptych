@@ -158,6 +158,7 @@ static const CGFloat MSSpanAspect = 2.0;
                                          featured.localizedName, names[layout]]
             : [NSString stringWithFormat:@"%.0fx%.0f %@", b.size.width, b.size.height, names[layout]]];
     NSUInteger n = 0;
+    NSMutableDictionary *setNow = [NSMutableDictionary dictionary];  // display id -> the file it got
     for (NSScreen *screen in [NSScreen screens]) {
         NSRect f = screen.frame;
         size_t pw = (size_t)llround(f.size.width * screen.backingScaleFactor);
@@ -210,11 +211,19 @@ static const CGFloat MSSpanAspect = 2.0;
         // NSWorkspace can say yes and change nothing (it set a Space the screen isn't showing: seen on a second
         // identical 27"). System Events, by the display's own ID, sets every Space on that screen.
         ok = [self systemEventsSet:file onDisplay:[screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue]] || ok;
+        if (ok) setNow[[screen.deviceDescription[@"NSScreenNumber"] stringValue]] = file;
         [lines addObject:[NSString stringWithFormat:@"%@: %zux%zu %@", screen.localizedName, pw, ph,
                           ok ? @"set" : [NSString stringWithFormat:@"not set (%@)", err.localizedDescription]]];
     }
     self.procText = [lines componentsJoinedByString:@"\n"];
     NSLog(@"%@", self.procText);
+    if (setNow.count) {
+        // For the window's preview, also when the launch agent's --daily run set them.
+        [[NSUserDefaults standardUserDefaults] setObject:setNow forKey:MSLastSetKey];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+        [[NSDistributedNotificationCenter defaultCenter] postNotificationName:MSWallpaperChangedNotification object:nil
+                                                                     userInfo:setNow deliverImmediately:YES];
+    }
     [self notifyOfCompletionInMainThread];
 }
 

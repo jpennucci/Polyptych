@@ -32,5 +32,7 @@ Polyptych: James's GPL v3 fork of nitantsoni/multiscape (github.com/jpennucci/Po
   and Nitant Soni. James's Mac moved over: MultiScape.app and its agent removed, settings copied (Desktop Wallpaper,
   Span fill, hourly), first hourly run set all 3. Released on GitHub as a fork of nitantsoni/multiscape, v1.0.0,
   ad-hoc signed (no Developer ID: Open Anyway). Old ~/Pictures/MultiScape can go once nothing shows from it.
+- 2026-11-25: preview over the drop area: the screens as arranged, each with what it shows (MSLastSet, else
+  NSWorkspace), refreshed after any run, the agent's too (distributed notification com.jpennucci.polyptych.changed).
 - Open: only the current Space on each screen gets it (macOS sets wallpaper per Space). Bezel gaps not modelled.
 - Rebuild: `xcodebuild -project MultiScape.xcodeproj -scheme MultiScape -configuration Release -derivedDataPath build/dd CODE_SIGN_IDENTITY=- build`

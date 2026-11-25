@@ -31,6 +31,7 @@
     NSTextField *_folderField;
     NSPopUpButton *_layoutMenu;
     NSPopUpButton *_scheduleMenu;
+    NSImageView *_preview;
 }
 
 - (void) notifyOfCompletedBackgroundExecution:(NSNotification*)notif;
@@ -48,6 +49,73 @@
     [sizeLabel setStringValue:[NSString stringWithFormat:@"%.0f x %.0f", sz.width, sz.height]];
     [infoField setStringValue:@""];  // the nib's placeholder said 0 x 0
     [self addDailyControls];
+    [self addPreview];
+}
+
+#pragma mark Preview
+// The screens as they're arranged, each with the picture it has now, over the drop area. It takes no drops itself,
+// so a picture dropped on it still reaches the drop area beneath.
+- (void)addPreview {
+    _preview = [[NSImageView alloc] initWithFrame:NSInsetRect(baseImageView.frame, 6, 6)];
+    _preview.imageScaling = NSImageScaleProportionallyUpOrDown;
+    _preview.editable = NO;
+    [_preview unregisterDraggedTypes];
+    _preview.autoresizingMask = baseImageView.autoresizingMask;
+    [baseImageView.superview addSubview:_preview positioned:NSWindowAbove relativeTo:baseImageView];
+    [self refreshPreview];
+    [[NSDistributedNotificationCenter defaultCenter] addObserver:self selector:@selector(wallpaperChanged:)
+                                                            name:MSWallpaperChangedNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(refreshPreview)
+                                                 name:NSApplicationDidChangeScreenParametersNotification object:nil];
+}
+
+- (void)wallpaperChanged:(NSNotification *)n {
+    [self refreshPreviewWith:n.userInfo];
+}
+
+- (void)refreshPreview { [self refreshPreviewWith:nil]; }
+
+- (void)refreshPreviewWith:(NSDictionary *)given {
+    NSDictionary *last = given.count ? given : [[NSUserDefaults standardUserDefaults] dictionaryForKey:MSLastSetKey];
+    NSArray<NSScreen *> *screens = [NSScreen screens];
+    NSRect canvas = NSZeroRect;
+    for (NSScreen *s in screens) canvas = NSIsEmptyRect(canvas) ? s.frame : NSUnionRect(canvas, s.frame);
+    if (NSIsEmptyRect(canvas)) return;
+    // Drawn at 1 point per 8 of the screens', a gap between them for the bezels.
+    const CGFloat k = 1.0 / 8.0, gap = 6, pad = 4;
+    NSSize size = NSMakeSize(ceil(canvas.size.width * k) + 2 * pad, ceil(canvas.size.height * k) + 2 * pad);
+    NSImage *sheet = [NSImage imageWithSize:size flipped:NO drawingHandler:^BOOL(NSRect dst) {
+        for (NSScreen *s in screens) {
+            NSRect f = s.frame;
+            NSRect r = NSInsetRect(NSMakeRect(pad + (f.origin.x - canvas.origin.x) * k, pad + (f.origin.y - canvas.origin.y) * k,
+                                              f.size.width * k, f.size.height * k), gap / 2, gap / 2);
+            NSString *key = [s.deviceDescription[@"NSScreenNumber"] stringValue];
+            NSString *path = last[key];
+            if (!path || ![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+                path = [[NSWorkspace sharedWorkspace] desktopImageURLForScreen:s].path;  // what macOS says it shows
+            }
+            NSImage *pic = path ? [[NSImage alloc] initWithContentsOfFile:path] : nil;
+            NSBezierPath *clip = [NSBezierPath bezierPathWithRoundedRect:r xRadius:3 yRadius:3];
+            [NSGraphicsContext saveGraphicsState];
+            [clip addClip];
+            [[NSColor colorWithWhite:0.12 alpha:1] set];
+            NSRectFill(r);
+            if (pic) {
+                // The piece is the screen's own shape: fill the rectangle with it, centred.
+                NSSize ps = pic.size;
+                CGFloat sc = MAX(r.size.width / ps.width, r.size.height / ps.height);
+                NSRect into = NSMakeRect(NSMidX(r) - ps.width * sc / 2, NSMidY(r) - ps.height * sc / 2, ps.width * sc, ps.height * sc);
+                [pic drawInRect:into fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1];
+            }
+            [NSGraphicsContext restoreGraphicsState];
+            [[NSColor colorWithWhite:1 alpha:0.25] set];
+            clip.lineWidth = 1;
+            [clip stroke];
+        }
+        return YES;
+    }];
+    _preview.image = sheet;
+    _preview.toolTip = @"What each screen shows now, as they're arranged in System Settings > Displays. Drop a picture here to use it.";
 }
 
 #pragma mark Folder, layout and schedule
@@ -163,7 +231,8 @@
 
 - (void)notifyOfCompletedBackgroundExecution:(NSNotification*)notif {
     if([notif object] == _worker) {
-        [infoField setStringValue:_worker.procText];
+        [infoField setStringValue:[_worker.procText stringByReplacingOccurrencesOfString:@"\n" withString:@"  ·  "]];
+        [self refreshPreview];
     }
 }
 
