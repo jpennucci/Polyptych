@@ -131,7 +131,7 @@ const uint32_t maxDisplays = 20;
 #else
         SystemEventsDesktop *thisDesktop = [[sysEventsBridgeApp desktops] objectAtIndex:(_displayCount-1-i)];
 #endif
-        [thisDesktop setPicture:(SystemEventsAlias *)[NSURL URLWithString:directoryForOutput]];
+        [thisDesktop setPicture:(SystemEventsAlias *)[NSURL fileURLWithPath:directoryForOutput]];  // a file URL: URLWithString on a path set nothing
         j--;
     }
     

@@ -20,6 +20,8 @@
 	<string>1.5</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>MultiScape sets each display wallpaper through System Events.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
