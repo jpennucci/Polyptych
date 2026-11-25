@@ -28,7 +28,7 @@ A *polyptych* is a painting made of several panels. Polyptych makes one out of y
 3. When it first sets a wallpaper, macOS asks whether Polyptych may control **System Events**. Click **Allow**: some
    screens only take a new wallpaper that way.
 
-Needs macOS 12 or later.
+Needs macOS 12 or later, on Apple silicon or Intel.
 
 ## Use
 
@@ -51,7 +51,7 @@ quits; Change: Off removes it. Its log is `~/Library/Logs/Polyptych.log`.
 
 ```sh
 xcodebuild -project MultiScape.xcodeproj -scheme MultiScape -configuration Release \
-  -derivedDataPath build/dd CODE_SIGN_IDENTITY=- build
+  -derivedDataPath build/dd CODE_SIGN_IDENTITY=- ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build
 ```
 
 The app is `build/dd/Build/Products/Release/Polyptych.app`.
