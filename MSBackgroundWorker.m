@@ -21,16 +21,14 @@
 
 #import "MSBackgroundWorker.h"
 
-#ifndef REVERSED
-    #define REVERSED
-#endif
-
-const uint32_t maxDisplays = 20;
+// Displays of any size, orientation and resolution: each screen's place comes from the arrangement in
+// System Settings > Displays (NSScreen frames, in points, rotation already applied). The picture is scaled
+// to cover the whole arrangement, centred, and each screen gets its own rectangle at its own pixel count.
 
 @interface MSBackgroundWorker () {
-    uint32_t _displayCount;
-    CGSize *_allScreenSizes;
-    CGSize _perfectSize;
+    NSRect _canvas;       // union of every screen's frame, in points
+    CGFloat _maxScale;    // the sharpest screen's pixels per point
+    CGSize _perfectSize;  // the picture size that covers the canvas at _maxScale, in pixels
 }
 
 - (void)mainThreadCompletionNotification;
@@ -45,54 +43,20 @@ const uint32_t maxDisplays = 20;
 - (instancetype)init {
     if (self = [super init]) {
         fileManager = [NSFileManager defaultManager];
-        sysEventsBridgeApp = [SBApplication applicationWithBundleIdentifier:@"com.apple.SystemEvents"];        
-    }    
+    }
     return self;
 }
 
 - (CGSize)perfectSize {
-    CGDirectDisplayID onlineDisplays[maxDisplays];
-    _displayCount = 0;
-    if (CGGetOnlineDisplayList(maxDisplays, onlineDisplays, &_displayCount) != kCGErrorSuccess) {
-        NSLog(@"CGGetOnlineDisplayList Error.");
-        return CGSizeZero;
+    _canvas = NSZeroRect;
+    _maxScale = 1.0;
+    for (NSScreen *screen in [NSScreen screens]) {
+        _canvas = NSIsEmptyRect(_canvas) ? screen.frame : NSUnionRect(_canvas, screen.frame);
+        _maxScale = MAX(_maxScale, screen.backingScaleFactor);
+        NSLog(@"screen %@: frame %@, scale %.0f", screen.localizedName, NSStringFromRect(screen.frame), screen.backingScaleFactor);
     }
-
-    free(_allScreenSizes);
-    _allScreenSizes = calloc(maxDisplays, sizeof(CGSize));  // was malloc(maxDisplays): 20 bytes, not 20 sizes
-    _perfectSize = CGSizeZero;
-    for (uint32_t i = 0; i < _displayCount; i++) {
-        CGSize sz = [self getDisplayResolution:onlineDisplays[i]];
-#ifndef REVERSED
-        _allScreenSizes[i] = sz;
-#else
-        _allScreenSizes[_displayCount-1-i] = sz;
-#endif
-        _perfectSize.width += sz.width;
-        _perfectSize.height = MAX(_perfectSize.height, sz.height);
-    }
+    _perfectSize = CGSizeMake(ceil(_canvas.size.width * _maxScale), ceil(_canvas.size.height * _maxScale));
     return _perfectSize;
-}
-
-- (CGSize)getDisplayResolution:(CGDirectDisplayID)displayID {
-    NSArray *allModes = (__bridge NSArray *)(CGDisplayCopyAllDisplayModes(displayID, nil));
-    NSMutableArray *allRez = [[NSMutableArray alloc] init];
-    CGSize maxRez = CGSizeZero;
-    for (id aMode in allModes) {
-        CGDisplayModeRef thisMode = (__bridge CGDisplayModeRef)(aMode);
-        size_t theWidth = CGDisplayModeGetWidth(thisMode);
-        size_t theHeight = CGDisplayModeGetHeight(thisMode);
-        // Get the first one
-        if (CGSizeEqualToSize(maxRez, CGSizeZero)) {
-            maxRez = CGSizeMake(theWidth, theHeight);
-        }
-        NSString *theRez = [NSString stringWithFormat:@"%zux%zu", theWidth, theHeight];
-        if (![allRez containsObject:theRez]) {
-            [allRez addObject:theRez];
-        }
-    }
-    NSLog(@" display deatails = %@", allRez);
-    return maxRez;
 }
 
 - (void)mainThreadCompletionNotification {
@@ -105,36 +69,64 @@ const uint32_t maxDisplays = 20;
 }
 
 - (void)execute {
-    CIImage *baseCIImage = [CIImage imageWithData:[baseImage TIFFRepresentation]];
-    double scaleFactor = [self scaleFactorWithSize:_perfectSize withOriginalImage:baseCIImage];
-    NSLog(@"Scale factor for image:%f", scaleFactor);
-    
-    CIImage *scaledImage = [self scaleImage:baseCIImage byFactor:scaleFactor];
-    self.procText = [NSString stringWithFormat:@"%ix%i -(x%f)-> %ix%i", (int)[baseCIImage extent].size.width,  (int)[baseCIImage extent].size.height, scaleFactor, (int)[scaledImage extent].size.width, (int)[scaledImage extent].size.height];
-    
-    NSString *outputDirectory = [self outputDirectory];
-    CGRect currentRect = CGRectZero;
-    int j = _displayCount-1;
-    for (int i = 0; i < _displayCount; i++) {
-        // CIVector -> [x, y, w, h]
-        
-        CIVector *cropForScreen = [[CIVector alloc] initWithX:currentRect.origin.x Y:(int)[scaledImage extent].size.height-_allScreenSizes[j].height
-                                                            Z:_allScreenSizes[j].width W:(int)[scaledImage extent].size.height];
-        currentRect.origin.x += _allScreenSizes[j].width;
-        CIImage *croppedImageForScreen = [self cropImage:scaledImage withRect:cropForScreen];
-        NSBitmapImageRep *bitmapImage = [self bitmapImageRepForImage:croppedImageForScreen];
-        NSString *directoryForOutput = [NSString stringWithFormat:@"%@/%d.tiff", outputDirectory, j];
-        
-        [self saveImageToFile:directoryForOutput imageRep:bitmapImage];
-#ifndef REVERSED
-        SystemEventsDesktop *thisDesktop = [[sysEventsBridgeApp desktops] objectAtIndex:i];
-#else
-        SystemEventsDesktop *thisDesktop = [[sysEventsBridgeApp desktops] objectAtIndex:(_displayCount-1-i)];
-#endif
-        [thisDesktop setPicture:(SystemEventsAlias *)[NSURL fileURLWithPath:directoryForOutput]];  // a file URL: URLWithString on a path set nothing
-        j--;
+    [self perfectSize];  // the arrangement may have changed since the window opened
+    CIImage *base = [CIImage imageWithData:[baseImage TIFFRepresentation]];
+    CGRect b = [base extent];
+    if (CGRectIsEmpty(b) || CGRectIsEmpty(_canvas)) {
+        self.procText = @"Couldn't read the picture or the displays.";
+        [self notifyOfCompletionInMainThread];
+        return;
     }
-    
+
+    // Cover the canvas (no stretching), centred: the overhang is cropped equally from both sides.
+    double scale = MAX(_perfectSize.width / b.size.width, _perfectSize.height / b.size.height);
+    CIImage *scaled = [self scaleImage:base byFactor:scale];
+    CGRect se = [scaled extent];
+    CGFloat offX = se.origin.x + (se.size.width - _perfectSize.width) / 2.0;
+    CGFloat offY = se.origin.y + (se.size.height - _perfectSize.height) / 2.0;
+
+    NSString *outputDirectory = [self outputDirectory];
+    CIContext *ctx = [CIContext contextWithOptions:nil];
+    NSMutableArray *lines = [NSMutableArray arrayWithObject:
+        [NSString stringWithFormat:@"%.0fx%.0f -(x%.3f)-> %.0fx%.0f", b.size.width, b.size.height, scale,
+                                   _perfectSize.width, _perfectSize.height]];
+    NSUInteger n = 0;
+    for (NSScreen *screen in [NSScreen screens]) {
+        NSRect f = screen.frame;
+        // This screen's rectangle in the scaled picture (Core Image and Cocoa both count y up from the bottom).
+        CGRect r = CGRectMake(offX + (f.origin.x - _canvas.origin.x) * _maxScale,
+                              offY + (f.origin.y - _canvas.origin.y) * _maxScale,
+                              f.size.width * _maxScale, f.size.height * _maxScale);
+        CIImage *piece = [[scaled imageByCroppingToRect:r]
+                          imageByApplyingTransform:CGAffineTransformMakeTranslation(-r.origin.x, -r.origin.y)];
+        // Down to this screen's own pixels (a 1x screen beside 2x ones).
+        CGFloat own = screen.backingScaleFactor / _maxScale;
+        size_t pw = (size_t)llround(f.size.width * screen.backingScaleFactor);
+        size_t ph = (size_t)llround(f.size.height * screen.backingScaleFactor);
+        if (own < 1.0) {
+            piece = [self scaleImage:piece byFactor:own];
+        }
+        CGImageRef cg = [ctx createCGImage:piece fromRect:CGRectMake(0, 0, pw, ph)];
+        if (!cg) { [lines addObject:[NSString stringWithFormat:@"%@: couldn't render", screen.localizedName]]; continue; }
+        NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:cg];
+        CGImageRelease(cg);
+
+        NSString *safeName = [[screen.localizedName componentsSeparatedByCharactersInSet:
+                               [[NSCharacterSet alphanumericCharacterSet] invertedSet]] componentsJoinedByString:@"_"];
+        NSString *file = [NSString stringWithFormat:@"%@/%lu-%@.jpg", outputDirectory, (unsigned long)n++, safeName];
+        [self saveImageToFile:file imageRep:rep];
+
+        if (self.dryRun) { [lines addObject:[NSString stringWithFormat:@"%@: %zux%zu made", screen.localizedName, pw, ph]]; continue; }
+        NSError *err = nil;
+        NSDictionary *opts = @{NSWorkspaceDesktopImageScalingKey: @(NSImageScaleProportionallyUpOrDown),
+                               NSWorkspaceDesktopImageAllowClippingKey: @YES};
+        BOOL ok = [[NSWorkspace sharedWorkspace] setDesktopImageURL:[NSURL fileURLWithPath:file]
+                                                          forScreen:screen options:opts error:&err];
+        [lines addObject:[NSString stringWithFormat:@"%@: %zux%zu %@", screen.localizedName, pw, ph,
+                          ok ? @"set" : [NSString stringWithFormat:@"not set (%@)", err.localizedDescription]]];
+    }
+    self.procText = [lines componentsJoinedByString:@"\n"];
+    NSLog(@"%@", self.procText);
     [self notifyOfCompletionInMainThread];
 }
 
@@ -150,53 +142,6 @@ const uint32_t maxDisplays = 20;
     return directoryForOutput;
 }
 
-- (CIImage* )cropImage:(CIImage *)imageToCrop withRect:(CIVector *)screenCropVector {
-    CIFilter *thisCropFilter = [CIFilter filterWithName:@"CICrop"];
-    [thisCropFilter setDefaults];
-    [thisCropFilter setValue:screenCropVector forKey:@"inputRectangle"];
-    [thisCropFilter setValue:imageToCrop forKey:@"inputImage"];
-    return [thisCropFilter valueForKey:@"outputImage"];
-}
-
-- (NSBitmapImageRep *)bitmapImageRepForImage:(CIImage*)ciImage {
-    NSBitmapImageRep *bitmapImageRep = nil;
-    CGRect extent = [ciImage extent];
-    bitmapImageRep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL 
-                                                             pixelsWide:extent.size.width 
-                                                             pixelsHigh:extent.size.height 
-                                                          bitsPerSample:8 
-                                                        samplesPerPixel:4 
-                                                               hasAlpha:YES
-                                                               isPlanar:NO 
-                                                         colorSpaceName:NSDeviceRGBColorSpace
-                                                            bytesPerRow:0
-                                                           bitsPerPixel:0];
-    NSGraphicsContext *nsContext = [NSGraphicsContext graphicsContextWithBitmapImageRep:bitmapImageRep];
-    [NSGraphicsContext saveGraphicsState];
-    [NSGraphicsContext setCurrentContext:nsContext];
-    [[NSColor clearColor] set];
-    NSRectFill(NSMakeRect(0, 0, [bitmapImageRep pixelsWide], [bitmapImageRep pixelsHigh]));
-    CGRect imageDestinationRect = CGRectMake(0.0, [bitmapImageRep pixelsHigh] - extent.size.height, extent.size.width, extent.size.height);
-    CIContext *ciContext = [nsContext CIContext];
-    [ciContext drawImage:ciImage inRect:imageDestinationRect fromRect:extent];
-    [NSGraphicsContext restoreGraphicsState];
-    //[NSGraphicsContext restoreGraphicsState];
-    return bitmapImageRep;
-}
-
-//- (CIVector *)cropRectForScreen:(NSScreen*)screen inFullSpace:(NSRect)fullSpace {
-//    NSRect thisScreenFrame = [screen frame];
-//
-//    float thisX = thisScreenFrame.origin.x - fullSpace.origin.x;
-//    float thisY = thisScreenFrame.origin.y - fullSpace.origin.y;
-//    float thisZ = thisScreenFrame.size.width;
-//    float thisW = thisScreenFrame.size.height;
-//    NSLog(@"thisX %f thisY %f thisZ %f thisW %f",thisX,thisY,thisZ,thisW);
-//    NSLog(@"test random");
-//    CIVector *thisVector = [[CIVector alloc] initWithX:thisX Y:thisY Z:thisZ W:thisW];
-//    return thisVector;
-//}
-
 - (CIImage*)scaleImage:(CIImage*)imageToScale byFactor:(double)scaleFactor {
     CIFilter *scaleTransformFilter = [CIFilter filterWithName:@"CILanczosScaleTransform"];
     [scaleTransformFilter setValue:[NSNumber numberWithDouble:scaleFactor] forKey:@"inputScale"];
@@ -208,19 +153,9 @@ const uint32_t maxDisplays = 20;
     return [scaleTransformFilter valueForKey:@"outputImage"];
 }
 
-- (double)scaleFactorWithSize:(CGSize)size withOriginalImage:(CIImage*)originalImage {
-    CGRect baseImageRect = [originalImage extent]; 
-    
-    NSLog(@"\nBase Image Dimensions:\n              %f\n%f                 %f\n              %f",baseImageRect.size.height, baseImageRect.origin.x, baseImageRect.size.width, baseImageRect.origin.y);
-    
-    double hScale = size.width / baseImageRect.size.width;
-    double vScale = size.height / baseImageRect.size.height;
-    return MAX(hScale, vScale);
-}
-
 - (void)saveImageToFile:(NSString*)fileLocation
                imageRep:(NSBitmapImageRep*)outputBitmapImageRep {
-    NSDictionary *properties = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithFloat:1.0], NSImageCompressionFactor, [NSNumber numberWithBool:FALSE], NSImageProgressive, nil];
+    NSDictionary *properties = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithFloat:0.95], NSImageCompressionFactor, [NSNumber numberWithBool:FALSE], NSImageProgressive, nil];
     NSData *outputData = [outputBitmapImageRep representationUsingType:NSJPEGFileType properties:properties];
     [outputData writeToFile:fileLocation atomically:NO];
 }

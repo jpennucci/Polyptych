@@ -20,24 +20,21 @@
 
 #import <Cocoa/Cocoa.h>
 #import <Quartz/Quartz.h>
-#import "SystemEvents.h"
 
 #define MSBackgroundWorkerFinishedNotification @"MSBackgroundWorkerFinishedNotification"
 
 @interface MSBackgroundWorker : NSObject {
     NSImage *__weak baseImage;
 
-    //For setting the desktop
-    SystemEventsApplication *sysEventsBridgeApp;
-
     //For creating the folders for output
     NSFileManager *fileManager;
 
-    NSString *__weak procText;
+    NSString *procText;
 }
 
 @property (weak, readwrite) NSImage *baseImage; 
-@property (weak, readwrite) NSString *procText;
+@property (copy, readwrite) NSString *procText;
+@property (assign, readwrite) BOOL dryRun;     // make the pictures, leave the wallpaper alone
 
 - (void)execute;
 
