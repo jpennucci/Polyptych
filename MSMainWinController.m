@@ -4,6 +4,7 @@
 //
 //  Created by David Zwerdling on 12/20/08.
 //  Copyright 2010 Laughing Man Software. All rights reserved.
+//  Modified 2026-11-25 by James Pennucci for Polyptych: folder, layout and schedule controls.
 //  This file is part of MultiScape.
 //
 //MultiScape is free software: you can redistribute it and/or modify

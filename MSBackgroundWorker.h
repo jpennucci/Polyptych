@@ -4,6 +4,7 @@
 //
 //  Created by David Zwerdling on 11/11/10.
 //  Copyright 2010 Laughing Man Software. All rights reserved.
+//  Modified 2026-11-25 by James Pennucci for Polyptych: layouts, dryRun, no Scripting Bridge.
 //
 //MultiScape is free software: you can redistribute it and/or modify
 //it under the terms of the GNU General Public License as published by

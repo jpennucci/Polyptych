@@ -4,6 +4,8 @@
 //
 //  Created by David Zwerdling on 11/11/10.
 //  Copyright 2010 Laughing Man Software. All rights reserved.
+//  Modified 2026-11-25 by James Pennucci for Polyptych: displays of any size, rotation and resolution from the
+//  Displays arrangement; seven layouts; NSWorkspace and System Events by display id; old runs cleaned up.
 //
 //
 //MultiScape is free software: you can redistribute it and/or modify
@@ -232,14 +234,14 @@ static const CGFloat MSSpanAspect = 2.0;
 }
 
 - (NSString*)outputDirectory {
-    NSString *directoryForOutput = [NSString stringWithFormat:[@"~/Pictures/MultiScape/%f" stringByExpandingTildeInPath],
+    NSString *directoryForOutput = [NSString stringWithFormat:[@"~/Pictures/Polyptych/%f" stringByExpandingTildeInPath],
                                     [[NSDate date] timeIntervalSince1970]];
         
-    if(![fileManager fileExistsAtPath:[@"~/Pictures/MultiScape" stringByExpandingTildeInPath]]) {
-        [fileManager createDirectoryAtPath:[@"~/Pictures/MultiScape" stringByExpandingTildeInPath] withIntermediateDirectories:YES attributes:nil error:nil];
+    if(![fileManager fileExistsAtPath:[@"~/Pictures/Polyptych" stringByExpandingTildeInPath]]) {
+        [fileManager createDirectoryAtPath:[@"~/Pictures/Polyptych" stringByExpandingTildeInPath] withIntermediateDirectories:YES attributes:nil error:nil];
     }
     // Keep the last few runs (the wallpaper in use is always among them), not one more folder a day forever.
-    NSString *root = [@"~/Pictures/MultiScape" stringByExpandingTildeInPath];
+    NSString *root = [@"~/Pictures/Polyptych" stringByExpandingTildeInPath];
     NSArray *runs = [[[fileManager contentsOfDirectoryAtPath:root error:nil]
                       filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF MATCHES '^[0-9]+\\.[0-9]+$'"]]
                      sortedArrayUsingComparator:^(NSString *a, NSString *b) { return [@(b.doubleValue) compare:@(a.doubleValue)]; }];

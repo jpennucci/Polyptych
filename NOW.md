@@ -1,8 +1,8 @@
 # Now
 
-Local clone of nitantsoni/multiscape (no releases upstream), built and installed to /Applications. Read first, update last.
+Polyptych: James's GPL v3 fork of nitantsoni/multiscape (github.com/jpennucci/Polyptych). Read first, update last.
 
-- 2026-11-25: built with Xcode 27.1 (arm64, ad-hoc signed), installed to /Applications/MultiScape.app.
+- 2026-11-25: built with Xcode 27.1 (arm64, ad-hoc signed), installed to /Applications/MultiScape.app (now Polyptych.app).
 - Fixed: crash on launch with 2+ monitors. MSBackgroundWorker.m allocated 20 bytes for 20 CGSizes (heap overflow);
   now calloc(maxDisplays, sizeof(CGSize)). Not sent upstream.
 - 2026-11-25: displays of any size, rotation and resolution. MSBackgroundWorker reads NSScreen frames (the
@@ -27,5 +27,10 @@ Local clone of nitantsoni/multiscape (no releases upstream), built and installed
   NSAppleEventsUsageDescription back. Cleanup skips any run folder named in
   ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist. Ad-hoc signing: every rebuild asks for the
   System Events permission again.
+- 2026-11-25: renamed Polyptych 1.0.0 (com.jpennucci.Polyptych; agent com.jpennucci.polyptych; ~/Pictures/Polyptych;
+  ~/Library/Logs/Polyptych.log). README with credits and changes, NSHumanReadableCopyright credits David Zwerdling
+  and Nitant Soni. James's Mac moved over: MultiScape.app and its agent removed, settings copied (Desktop Wallpaper,
+  Span fill, hourly), first hourly run set all 3. Released on GitHub as a fork of nitantsoni/multiscape, v1.0.0,
+  ad-hoc signed (no Developer ID: Open Anyway). Old ~/Pictures/MultiScape can go once nothing shows from it.
 - Open: only the current Space on each screen gets it (macOS sets wallpaper per Space). Bezel gaps not modelled.
 - Rebuild: `xcodebuild -project MultiScape.xcodeproj -scheme MultiScape -configuration Release -derivedDataPath build/dd CODE_SIGN_IDENTITY=- build`

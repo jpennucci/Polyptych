@@ -1,5 +1,5 @@
-//  MSDaily.h: a new wallpaper every day from a folder, set by a launch agent running MultiScape --daily.
-//  GPL v3, as the rest of MultiScape.
+//  MSDaily.h: a new wallpaper every hour or day from a folder, set by a launch agent running Polyptych --daily.
+//  Copyright 2026 James Pennucci. GPL v3 (see LICENSE), as the rest of Polyptych, a fork of MultiScape.
 
 #import <Cocoa/Cocoa.h>
 #import "MSBackgroundWorker.h"

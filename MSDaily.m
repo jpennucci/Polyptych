@@ -1,12 +1,12 @@
-//  MSDaily.m: a new wallpaper every day from a folder, set by a launch agent running MultiScape --daily.
-//  GPL v3, as the rest of MultiScape.
+//  MSDaily.m: a new wallpaper every hour or day from a folder, set by a launch agent running Polyptych --daily.
+//  Copyright 2026 James Pennucci. GPL v3 (see LICENSE), as the rest of Polyptych, a fork of MultiScape.
 
 #import "MSDaily.h"
 
 static NSString *const MSFolderKey = @"MSDailyFolder";
 static NSString *const MSQueueKey = @"MSDailyQueue";      // pictures still to show this round, shuffled
 static NSString *const MSLastKey = @"MSDailyLast";
-static NSString *const MSAgentLabel = @"com.multiscape.daily";
+static NSString *const MSAgentLabel = @"com.jpennucci.polyptych";
 static NSString *const MSScheduleKey = @"MSSchedule";
 static NSString *const MSLayoutKey = @"MSLayout";
 static const NSInteger MSHour = 6;                        // daily: 06:00, or at wake / login if the Mac was off
@@ -63,7 +63,7 @@ static const NSInteger MSHour = 6;                        // daily: 06:00, or at
         @"ProgramArguments": @[[[NSBundle mainBundle] executablePath], @"--daily"],
         @"RunAtLoad": @YES,                 // and at login
         @"ProcessType": @"Background",
-        @"StandardErrorPath": [@"~/Library/Logs/MultiScape-daily.log" stringByExpandingTildeInPath],
+        @"StandardErrorPath": [@"~/Library/Logs/Polyptych.log" stringByExpandingTildeInPath],
     } mutableCopy];
     if (schedule == MSScheduleHourly) {
         agent[@"StartInterval"] = @3600;

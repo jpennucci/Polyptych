@@ -4,6 +4,7 @@
 //
 //  Created by David Zwerdling on 11/11/10.
 //  Copyright 2010 Laughing Man Software. All rights reserved.
+//  Modified 2026-11-25 by James Pennucci for Polyptych: --daily for the launch agent.
 //  GPL v3.
 
 #import <Cocoa/Cocoa.h>

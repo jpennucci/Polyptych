@@ -268,8 +268,8 @@
 				GCC_PREFIX_HEADER = MultiScape_Prefix.pch;
 				INFOPLIST_FILE = Info.plist;
 				INSTALL_PATH = "$(HOME)/Applications";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.yourcompany.${PRODUCT_NAME:identifier}";
-				PRODUCT_NAME = MultiScape;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jpennucci.Polyptych;
+				PRODUCT_NAME = Polyptych;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -286,8 +286,8 @@
 				GCC_PREFIX_HEADER = MultiScape_Prefix.pch;
 				INFOPLIST_FILE = Info.plist;
 				INSTALL_PATH = "$(HOME)/Applications";
-				PRODUCT_BUNDLE_IDENTIFIER = "com.yourcompany.${PRODUCT_NAME:identifier}";
-				PRODUCT_NAME = MultiScape;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jpennucci.Polyptych;
+				PRODUCT_NAME = Polyptych;
 				SDKROOT = macosx;
 			};
 			name = Release;
