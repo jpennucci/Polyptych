@@ -21,5 +21,11 @@ Local clone of nitantsoni/multiscape (no releases upstream), built and installed
   screen when its shape is within 25% (a 3:2 photo fills the 43"). All 7 checked by dry run on a 3:2 grid; the hourly
   agent checked with launchd on an empty folder (ran at load, exit 0), then removed. Bundle id is still
   com.yourcompany.MultiScape (its settings live there).
+- 2026-11-25: right 27" didn't change: NSWorkspace setDesktopImageURL said yes and changed nothing (that display
+  has two Spaces on record). Now each screen is also set through System Events by display id (`id of desktop` =
+  CGDirectDisplayID; its display names are numbered the other way round from NSScreen's, never match by name), with
+  NSAppleEventsUsageDescription back. Cleanup skips any run folder named in
+  ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist. Ad-hoc signing: every rebuild asks for the
+  System Events permission again.
 - Open: only the current Space on each screen gets it (macOS sets wallpaper per Space). Bezel gaps not modelled.
 - Rebuild: `xcodebuild -project MultiScape.xcodeproj -scheme MultiScape -configuration Release -derivedDataPath build/dd CODE_SIGN_IDENTITY=- build`

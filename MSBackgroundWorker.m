@@ -205,12 +205,30 @@ static const CGFloat MSSpanAspect = 2.0;
                                NSWorkspaceDesktopImageAllowClippingKey: @YES};
         BOOL ok = [[NSWorkspace sharedWorkspace] setDesktopImageURL:[NSURL fileURLWithPath:file]
                                                           forScreen:screen options:opts error:&err];
+        // NSWorkspace can say yes and change nothing (it set a Space the screen isn't showing: seen on a second
+        // identical 27"). System Events, by the display's own ID, sets every Space on that screen.
+        ok = [self systemEventsSet:file onDisplay:[screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue]] || ok;
         [lines addObject:[NSString stringWithFormat:@"%@: %zux%zu %@", screen.localizedName, pw, ph,
                           ok ? @"set" : [NSString stringWithFormat:@"not set (%@)", err.localizedDescription]]];
     }
     self.procText = [lines componentsJoinedByString:@"\n"];
     NSLog(@"%@", self.procText);
     [self notifyOfCompletionInMainThread];
+}
+
+- (BOOL)systemEventsSet:(NSString *)file onDisplay:(uint32_t)displayID {
+    NSString *escaped = [[file stringByReplacingOccurrencesOfString:@"\\" withString:@"\\\\"]
+                         stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+    NSString *src = [NSString stringWithFormat:
+        @"tell application \"System Events\"\n"
+         "  repeat with d in desktops\n"
+         "    if (id of d) is %u then set picture of d to POSIX file \"%@\"\n"
+         "  end repeat\n"
+         "end tell", displayID, escaped];
+    NSDictionary *error = nil;
+    [[[NSAppleScript alloc] initWithSource:src] executeAndReturnError:&error];
+    if (error) NSLog(@"System Events didn't set display %u: %@", displayID, error[NSAppleScriptErrorMessage]);
+    return error == nil;
 }
 
 - (NSString*)outputDirectory {
@@ -225,7 +243,12 @@ static const CGFloat MSSpanAspect = 2.0;
     NSArray *runs = [[[fileManager contentsOfDirectoryAtPath:root error:nil]
                       filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF MATCHES '^[0-9]+\\.[0-9]+$'"]]
                      sortedArrayUsingComparator:^(NSString *a, NSString *b) { return [@(b.doubleValue) compare:@(a.doubleValue)]; }];
+    // Never one a screen or a Space still shows: macOS's wallpaper store names the files it uses.
+    NSData *store = [NSData dataWithContentsOfFile:[@"~/Library/Application Support/com.apple.wallpaper/Store/Index.plist"
+                                                    stringByExpandingTildeInPath]];
     for (NSUInteger i = 4; i < runs.count; i++) {
+        NSData *name = [runs[i] dataUsingEncoding:NSUTF8StringEncoding];
+        if (store && [store rangeOfData:name options:0 range:NSMakeRange(0, store.length)].location != NSNotFound) continue;
         [fileManager removeItemAtPath:[root stringByAppendingPathComponent:runs[i]] error:nil];
     }
     [fileManager createDirectoryAtPath:directoryForOutput withIntermediateDirectories:YES attributes:nil error:nil];
