@@ -58,7 +58,8 @@ const uint32_t maxDisplays = 20;
         return CGSizeZero;
     }
 
-    _allScreenSizes = malloc(maxDisplays);
+    free(_allScreenSizes);
+    _allScreenSizes = calloc(maxDisplays, sizeof(CGSize));  // was malloc(maxDisplays): 20 bytes, not 20 sizes
     _perfectSize = CGSizeZero;
     for (uint32_t i = 0; i < _displayCount; i++) {
         CGSize sz = [self getDisplayResolution:onlineDisplays[i]];
